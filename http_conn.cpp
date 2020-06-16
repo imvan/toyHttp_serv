@@ -118,3 +118,93 @@ http_conn::LINE_STATUS http_conn::parse_line()
     }
     return LINE_OPEN;
 }
+
+
+bool http_conn::read()
+{
+    if(m_read_idx >= READ_BUFFER_SIZE)
+    {
+        printf("idx bigger than read buffer size\n");
+        return false;
+    }
+
+    int bytes_read = 0;
+    while(true)
+    {
+        bytes_read = recv(m_sockfd,m_read_buf+m_read_idx, 
+                        READ_BUFFER_SIZE - m_read_idx,0);
+        
+        if(bytes_read == -1)
+        {
+            if(errno = EAGAIN || errno == EWOULDBLOCK)
+            {
+                break;
+            }
+            return false;
+        }
+
+        else if( bytes_read == 0)
+        {
+            printf("maybe the client closed\n");
+            return false;
+        }
+
+        m_read_idx += bytes_read;
+
+    }
+    return true;
+}
+
+//to get the request method, URL ,and version
+http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
+{
+    m_url = strpbrk(text,"\t");
+    if( ! m_url )
+    {
+        return BAD_REQUEST;
+    }
+    *m_url++ = '\0';
+
+    char* method = text;
+    if(strcasecmp(method,"GET") == 0)
+    {
+        m_method = GET;
+    }
+    else
+    {
+        printf("we can only process GET, but we got another\n");
+        return BAD_REQUEST;
+    }
+
+    m_url += strspn( m_url, "\t");
+    m_version = strpbrk( m_url, "\t");
+
+    if(!m_version)
+    {
+        return BAD_REQUEST;
+    }
+
+    *m_version++ = '\0';
+    m_version += strspn( m_version, "\t");
+    if ( strcasecmp( m_version, "HTTP/1.1") != 0)
+    {
+        printf("wrong HTTP version\n");
+        return BAD_REQUEST;
+    }
+
+    if( strncasecmp( m_url, "http://", 7) == 0)
+    {
+        printf("NO http:// found in url\n");
+        m_url += 7;
+        m_url = strchr(m_url, '/');
+    }
+
+    if( !m_url || m_url[0] != '/')
+    {
+        printf("wrong url\n");
+        return BAD_REQUEST;
+    }
+
+    m_check_state = CHECK_STATE_HEADER;
+    return NO_REQUEST;
+}
