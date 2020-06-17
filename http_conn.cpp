@@ -136,7 +136,7 @@ bool http_conn::read()
         
         if(bytes_read == -1)
         {
-            if(errno = EAGAIN || errno == EWOULDBLOCK)
+            if(errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 break;
             }
@@ -207,4 +207,401 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 
     m_check_state = CHECK_STATE_HEADER;
     return NO_REQUEST;
+}
+
+//parse the header
+http_conn::HTTP_CODE http_conn::parse_headers( char* text)
+{
+    //when we got a empty line
+    //finish the parse
+    if( text[0] == '\0')
+    {
+        //if threre is request body
+        if(m_content_length != 0)
+        {
+            m_check_state = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+
+        //otherwise, we got a complete HTTP request
+        return GET_REQUEST;
+    }
+
+    //process Connection
+    else if( strncasecmp(text, "Connection:", 11) == 0)
+    {
+        text += 11;
+        text += strspn(text, "\t");
+        if(strcasecmp(text, "keep-alive") == 0)
+        {
+            m_linger = true;
+        }
+    }
+
+    //process Content-Length
+    else if(strncasecmp(text, "Content-Length:",15) == 0)
+    {
+        text += 15;
+        text += strspn(text,"\t");
+        m_content_length = atol(text);
+    }
+
+    //process Host
+    else if(strncasecmp(text, "Host:", 5) == 0)
+    {
+        text +=5;
+        text += strspn(text,"\t");
+        m_host = text;
+    }
+
+    else
+    {
+        printf("unknown header %s\n",text);
+    }
+
+    return NO_REQUEST;
+    
+}
+
+
+//HTTP request body, we don't parse it
+http_conn::HTTP_CODE http_conn::parse_content(char* text)
+{
+    if (m_read_idx >= (m_content_length + m_checked_idx))
+    {
+        text[m_content_length] = '\0';
+        return GET_REQUEST;
+    }
+    return NO_REQUEST;
+}
+
+http_conn::HTTP_CODE http_conn::process_read()
+{
+    LINE_STATUS line_status = LINE_OK;
+    HTTP_CODE ret = NO_REQUEST;
+    char* text = 0;
+
+    while( ( (m_check_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK) ) 
+        || ( ( line_status = parse_line() ) == LINE_OK ))
+    {
+        //get the text start positon in buffer;
+        text = get_line();
+
+        //point the start position in the end;
+        m_start_line = m_checked_idx;
+        printf("got 1 http line: %s\n", text);
+
+        switch( m_check_state )
+        {
+            case CHECK_STATE_REQUESTLINE:
+            {
+                ret = parse_request_line(text);
+                if(ret == BAD_REQUEST)
+                {
+                    return BAD_REQUEST;
+                }
+                break;
+            }
+
+            case CHECK_STATE_HEADER:
+            {
+                ret = parse_headers(text);
+                if(ret == BAD_REQUEST)
+                {
+                    return BAD_REQUEST;
+                }
+                else if(ret == GET_REQUEST)
+                {
+                    return do_request();
+                }
+                break;
+            }
+            case CHECK_STATE_CONTENT:
+            {
+                ret = parse_content(text);
+                if( ret == GET_REQUEST)
+                {
+                    return do_request();
+                }
+                line_status = LINE_OPEN;
+                break;
+            }
+            default:
+                return INTERNAL_ERROR;
+        }
+
+    }
+
+    return NO_REQUEST;
+}
+
+//when we got a correct complete HTTP request
+//then analyse the target file
+
+http_conn::HTTP_CODE http_conn::do_request()
+{
+    //the file path inited to the root path
+    strcpy( m_real_file, doc_root);
+    int len = strlen(doc_root);
+    
+    //add url to the tail of root path
+    strncpy( m_real_file + len, m_url, FILENAME_LEN - len -1);
+
+    //get file attributs and put it to the buf
+    if( stat(m_real_file, &m_file_stat) <0 )
+    {
+        printf("We got no this file\n");
+        return NO_RESOURCE;
+    }
+
+    if ( ! (m_file_stat.st_mode & S_IROTH))
+    {
+        printf("This file cannot be access\n");
+        return FORBIDDEN_REQUEST;
+    }
+
+    if( S_ISDIR( m_file_stat.st_mode))
+    {
+        printf("The url is a DIR, not a file name\n");
+        return BAD_REQUEST;
+    }
+
+
+    //map file to the shared memory
+    int fd = open( m_real_file, O_RDONLY);
+    m_file_address = (char *)mmap( 0, m_file_stat.st_size, PROT_READ,
+                       MAP_PRIVATE, fd, 0 );
+    
+    close(fd);
+    return FILE_REQUEST;
+}
+
+//unmap the shared memory
+void http_conn::unmap()
+{
+   if(m_file_address)
+   {
+       munmap(m_file_address,m_file_stat.st_size);
+       m_file_address = 0;
+   } 
+}
+
+
+//write the HTTP response
+bool http_conn::write()
+{
+    int temp = 0;
+    int bytes_have_send = 0;
+    int bytes_to_send = m_write_idx;
+
+    //if no data to send, re-init the connection
+    if(bytes_to_send == 0)
+    {
+        modfd( m_epollfd, m_sockfd, EPOLLIN);
+        init();
+        return true;
+    }
+
+    while(1)
+    {
+        temp = writev( m_sockfd, m_iv, m_iv_count);
+        if( temp <= -1)
+        {
+            //if TCP write buffer got no space
+            //wait for the next EPOLLOUT event
+            if(errno == EAGAIN)
+            {
+                printf("no enough space for writev, wait for next time\n");
+                modfd( m_epollfd, m_sockfd, EPOLLOUT);
+                return true;
+            }
+            printf("something wrong in writev\n");
+            unmap();
+            return false;
+        }
+
+        bytes_to_send -= temp;
+        bytes_have_send +=temp;
+
+        //respon successfully
+        if(bytes_to_send <= bytes_have_send)
+        {   
+            printf("write finished\n");
+            unmap();
+            // if keep alive
+            // re-init connection
+            if( m_linger)
+            {
+                printf("dont close, keep alive!\n");
+                init();
+                modfd( m_epollfd, m_sockfd, EPOLLIN);
+                return true;
+            }
+            //otherwise
+            else
+            {
+                printf("close the connection\n");
+                modfd(m_epollfd,m_sockfd, EPOLLIN);
+                return false;
+            }
+            
+        }
+    }
+}
+
+//write data to write buf
+bool http_conn::add_response(const char* format, ...)
+{
+    if( m_write_idx >= WRITE_BUFFER_SIZE)
+    {
+        printf("write data size exceeds the limit\n");
+        return false;
+    }
+
+    va_list arg_list;
+    va_start( arg_list,format);
+    int len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE-1-m_write_idx,
+                format,arg_list);
+    if( len >= (WRITE_BUFFER_SIZE -1 -m_write_idx))
+    {
+        return false;
+    }
+    m_write_idx +=len;
+    va_end(arg_list);
+    return true;
+}
+
+
+bool http_conn::add_status_line ( int status,const char* title)
+{
+    return add_response("%s %d %s\r\n","HTTP/1.1", status,title);
+}
+
+bool http_conn::add_headers( int content_len)
+{
+    add_content_length( content_len );
+    add_linger();
+    add_blank_line();
+}
+
+bool http_conn::add_content_length( int content_len )
+{
+    return add_response( "Content-Length: %d\r\n", content_len);
+}
+
+bool http_conn::add_linger()
+{
+    return add_response( "Connection: %s\r\n", 
+        (m_linger == true)?"keep-alive":"close");
+}
+
+bool http_conn::add_blank_line()
+{
+    return add_response( "%s", "\r\n");
+}
+
+bool http_conn::add_content( const char* content)
+{
+    return add_response("%s",content);
+}
+
+
+//accroding to the process result
+//response to the client
+bool http_conn::process_write(HTTP_CODE ret)
+{
+    switch(ret)
+    {
+        case INTERNAL_ERROR:
+        {
+            add_status_line( 500, error_500_title);
+            add_headers( strlen( error_500_form));
+            if( !add_content( error_500_form) )
+            {
+                printf("in INTERNAL_ERROR, add content failed\n");
+                return false;
+            }
+            break;
+        }
+        case BAD_REQUEST:
+        {
+            add_status_line(400, error_400_title);
+            add_headers( strlen(error_400_form));
+            if( !add_content( error_400_form))
+            {
+                printf("in BAD_REQUEST, add content failed\n");
+                return false;
+            }
+            break;
+        }
+
+        case FORBIDDEN_REQUEST:
+        {
+            add_status_line(403, error_403_title);
+            add_headers(strlen(error_403_form));
+            if( ! add_content(error_403_form))
+            {
+                printf("in FORBIDDEN_REQUEST, add content failed\n");
+                return false; 
+            }
+            break;
+        }
+        case FILE_REQUEST:
+        {
+            add_status_line( 200 , ok_200_title);
+            if( m_file_stat.st_size != 0)
+            {
+                add_headers( m_file_stat.st_size);
+                m_iv[0].iov_base = m_write_buf;
+                m_iv[0].iov_len = m_write_idx;
+                m_iv[1].iov_base = m_file_address;
+                m_iv[1].iov_len = m_file_stat.st_size;
+                m_iv_count = 2;
+                return true;
+            }
+            else
+            {
+                const char* ok_string = "<html><body></body></html>";
+                add_headers( strlen(ok_string));
+                if( !add_content(ok_string))
+                {
+                    return false;
+                }
+            }
+            
+        }
+
+        default:
+        {
+            return false;
+        }
+    }
+    m_iv[0].iov_base = m_write_buf;
+    m_iv[0].iov_len = m_write_idx;
+    m_iv_count = 1;
+    return true;
+}
+
+
+
+//called by threads in threadpool
+//the http request entry
+void http_conn::process()
+{
+    HTTP_CODE read_ret = process_read();
+    if( read_ret == NO_REQUEST)
+    {
+        modfd(m_epollfd,m_sockfd, EPOLLIN);
+        return;
+    }
+
+    bool write_ret = process_write(read_ret);
+    if(!write_ret)
+    {
+        //close the connection
+        close_conn();
+    }
+
+    modfd(m_epollfd,m_sockfd,EPOLLOUT);
+
 }
