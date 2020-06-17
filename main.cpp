@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
     addsig(SIGPIPE, SIG_IGN);
 
     //create a threadpool
-    threadpool<http_conn > * pool = NULL;
+    threadpool<http_conn> * pool = NULL;
     try
     {
         pool = new threadpool<http_conn>; 
@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
     assert(users);
     int user_count = 0;
 
-    int listenfd = socket( PF_UNIX,SOCK_STREAM,0);
+    int listenfd = socket( PF_INET,SOCK_STREAM,0);
     assert(listenfd >= 0);
 
     //when close, drop the write buf
@@ -87,6 +87,7 @@ int main(int argc, char* argv[])
     address.sin_port = htons(port);
 
     ret = bind(listenfd,(struct sockaddr*)&address,sizeof(address) );
+    printf("ret is %d\n",ret);
     assert(ret >= 0);
 
     ret = listen(listenfd,5);

@@ -3,8 +3,8 @@
 
 template<typename T>
 threadpool<T>::threadpool(int thread_number, int max_request)
-                :m_thread_number(thread_number),m_max_request(max_request),
-                m_stop(false),m_thread(NULL)
+                :m_thread_number(thread_number),m_max_requests(max_request),
+                m_stop(false),m_threads(NULL)
 {
     if((thread_number <= 0) || (max_request <= 0) )
     {
@@ -20,7 +20,7 @@ threadpool<T>::threadpool(int thread_number, int max_request)
     for(int i = 0; i<m_thread_number;  ++i)
     {
         printf("create the %dth thread\n",i);
-        if(pthread_create(m_thread+i,NULL,worker,this))
+        if(pthread_create(m_threads+i,NULL,worker,this))
         {   
             printf("create threads fail\n");
             delete [] m_threads;
@@ -55,7 +55,7 @@ bool threadpool<T>::append(T * request)
     }
     m_workqueue.push_back(request);
     m_queuelocker.unlock();
-    m_quueuestat.post();
+    m_queuestat.post();
     return true;
 }
 
@@ -72,7 +72,7 @@ void threadpool<T>::run()
 {
     while (! m_stop)
     {
-        m_quueuestat.wait();
+        m_queuestat.wait();
         m_queuelocker.lock();
         if( m_workqueue.empty())
         {
@@ -88,5 +88,6 @@ void threadpool<T>::run()
             continue;
         }
         request->process();
+        printf("process finished, wait another request\n");
     }
 }
