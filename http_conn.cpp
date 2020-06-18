@@ -56,8 +56,8 @@ void http_conn::init( int sockfd, const sockaddr_in & addr)
     m_address = addr;
     
     // to aovid TIME_WAIT, only for debug, remove in real establish
-    int reuse = 1;
-    setsockopt(m_sockfd,SOL_SOCKET,SO_REUSEADDR, & reuse, sizeof(reuse));
+    //int reuse = 1;
+    //setsockopt(m_sockfd,SOL_SOCKET,SO_REUSEADDR, & reuse, sizeof(reuse));
 
     addfd( m_epollfd, sockfd, true);
     m_user_count++;
@@ -418,6 +418,21 @@ bool http_conn::write()
     while(1)
     {
         temp = writev( m_sockfd, m_iv, m_iv_count);
+        if(m_iv_count == 1)
+        {
+            printf("i send what\n %s\n",m_iv[0].iov_base);
+        }
+        else if(m_iv_count == 2)
+        {
+            printf("i send what\n %s\n %s\n",m_iv[0].iov_base, m_iv[1].iov_base);
+        }
+        else
+        {
+            printf("m_iv_count == 0\n");
+        }
+        
+        
+        
         if( temp <= -1)
         {
             //if TCP write buffer got no space
