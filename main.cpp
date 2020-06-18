@@ -161,7 +161,6 @@ int main(int argc, char* argv[])
             {
                 if(!users[sockfd].write())
                 {
-                    printf("write fail\n");
                     users[sockfd].close_conn();
                 }
             }

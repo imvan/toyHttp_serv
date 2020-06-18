@@ -158,9 +158,12 @@ bool http_conn::read()
 //to get the request method, URL ,and version
 http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 {
-    m_url = strpbrk(text,"\t");
-    if( ! m_url )
+    printf("in parse_request_line, we got text: %s\n",text);
+    m_url = strpbrk(text," \t");
+    printf("m_url is %s\n",m_url);
+    if( !m_url )
     {
+        printf("no url!\n");
         return BAD_REQUEST;
     }
     *m_url++ = '\0';
@@ -168,6 +171,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
     char* method = text;
     if(strcasecmp(method,"GET") == 0)
     {
+        printf("we got a GET request\n");
         m_method = GET;
     }
     else
@@ -176,16 +180,17 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
         return BAD_REQUEST;
     }
 
-    m_url += strspn( m_url, "\t");
-    m_version = strpbrk( m_url, "\t");
+    m_url += strspn( m_url, " \t");
+    m_version = strpbrk( m_url, " \t");
 
     if(!m_version)
     {
+        printf("no version!\n");
         return BAD_REQUEST;
     }
 
     *m_version++ = '\0';
-    m_version += strspn( m_version, "\t");
+    m_version += strspn( m_version, " \t");
     if ( strcasecmp( m_version, "HTTP/1.1") != 0)
     {
         printf("wrong HTTP version\n");
@@ -295,9 +300,11 @@ http_conn::HTTP_CODE http_conn::process_read()
         {
             case CHECK_STATE_REQUESTLINE:
             {
+                printf("in CHECK_STATE_REQUESTLINE\n");
                 ret = parse_request_line(text);
                 if(ret == BAD_REQUEST)
                 {
+                    printf("its a bad request\n");
                     return BAD_REQUEST;
                 }
                 break;
@@ -305,19 +312,23 @@ http_conn::HTTP_CODE http_conn::process_read()
 
             case CHECK_STATE_HEADER:
             {
+                printf("in CHECK_STATE_HEADER\n");
                 ret = parse_headers(text);
                 if(ret == BAD_REQUEST)
                 {
+                    printf("its a bad request\n");
                     return BAD_REQUEST;
                 }
                 else if(ret == GET_REQUEST)
                 {
+                    printf("its a correct request\n");
                     return do_request();
                 }
                 break;
             }
             case CHECK_STATE_CONTENT:
             {
+                printf("in CHECK_STATE_CONTENT\n");
                 ret = parse_content(text);
                 if( ret == GET_REQUEST)
                 {
@@ -395,8 +406,10 @@ bool http_conn::write()
     int bytes_to_send = m_write_idx;
 
     //if no data to send, re-init the connection
+    printf("in write\n");
     if(bytes_to_send == 0)
     {
+        printf("no data to send\n");
         modfd( m_epollfd, m_sockfd, EPOLLIN);
         init();
         return true;
@@ -568,7 +581,20 @@ bool http_conn::process_write(HTTP_CODE ret)
                     return false;
                 }
             }
+            break;
             
+        }
+
+        case NO_RESOURCE:
+        {
+            add_status_line(404, error_404_title);
+            add_headers(strlen(error_404_form));
+            if( ! add_content(error_404_form))
+            {
+                printf("in NO_RESOURCE, add content failed\n");
+                return false; 
+            }
+            break;           
         }
 
         default:
@@ -594,10 +620,12 @@ void http_conn::process()
         modfd(m_epollfd,m_sockfd, EPOLLIN);
         return;
     }
-
+    printf("read_ret is %d\n",read_ret);
+    printf("AFTER PROCESS READ, NOW PREOCESS WRITE\n");
     bool write_ret = process_write(read_ret);
     if(!write_ret)
     {
+        printf("write_ret false\n");
         //close the connection
         close_conn();
     }
