@@ -76,8 +76,8 @@ int main(int argc, char* argv[])
     //when close, drop the write buf
     //send RST to client and reset self immediately
     //don't remain 2MSL timewait
-    struct linger tmp = {1,0};
-    setsockopt(listenfd, SOL_SOCKET,SO_LINGER, &tmp, sizeof(tmp));
+   // struct linger tmp = {1,0};
+   // setsockopt(listenfd, SOL_SOCKET,SO_LINGER, &tmp, sizeof(tmp));
     
     int ret = 0;
     struct sockaddr_in address;
