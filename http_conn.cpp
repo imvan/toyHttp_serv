@@ -158,6 +158,8 @@ bool http_conn::read()
 //to get the request method, URL ,and version
 http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 {
+
+
     printf("in parse_request_line, we got text: %s\n",text);
     m_url = strpbrk(text," \t");
     printf("m_url is %s\n",m_url);
@@ -168,17 +170,39 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
     }
     *m_url++ = '\0';
 
+
+
+    //parse the requst method
     char* method = text;
     if(strcasecmp(method,"GET") == 0)
     {
         printf("we got a GET request\n");
         m_method = GET;
     }
+    else if(strcasecmp(method,"POST") == 0)
+    {
+        printf("we got a POST request\n");
+        m_method = POST;
+    }
+    else if(strcasecmp(method,"PUT") == 0)
+    {
+        printf("we got a POST PUT\n");
+        m_method = PUT;
+    }
+    else if(strcasecmp(method,"DELETE") == 0)
+    {
+        printf("we got a DELETE request\n");
+        m_method = DELETE;
+    }
     else
     {
-        printf("we can only process GET, but we got another\n");
+        printf("unknowing requst method\n");
         return BAD_REQUEST;
     }
+
+
+
+
 
     m_url += strspn( m_url, " \t");
     m_version = strpbrk( m_url, " \t");
@@ -259,10 +283,37 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text)
         m_host = text;
     }
 
+
+    //process database
+    else if(strncasecmp(text, "REDIS:",6) == 0)
+    {
+        text += 6;
+        text += strspn(text,"\t");
+        m_redis_requst = text;
+        //do something about redis here
+    }
+
+    else if(strncasecmp(text, "MYSQL:",6 == 0))
+    {
+        text += 6;
+        text += strspn(text,"\t");
+        m_mysql_requst = text;
+        //do something about mysql here
+    }
+
+
+
     else
     {
         printf("unknown header %s\n",text);
     }
+
+    
+
+
+
+
+
 
     return NO_REQUEST;
     
@@ -346,11 +397,43 @@ http_conn::HTTP_CODE http_conn::process_read()
     return NO_REQUEST;
 }
 
+
+
+
+
 //when we got a correct complete HTTP request
 //then analyse the target file
 
 http_conn::HTTP_CODE http_conn::do_request()
 {
+    //process database here:
+    // all url start with /api  means database requst
+    if(strcasecmp(m_url,"/api?") == 0)
+    {
+      printf("its an database request\n");
+
+      m_url += strspn(m_url,"/api?");
+
+     //TODO:
+     //we need a func to parse api
+     //return HTTP_CODE::DATABASE_REQUEST
+     //we need two data struct to save the income requset and outcome result;
+
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+    //process file request here:
+
     //the file path inited to the root path
     strcpy( m_real_file, doc_root);
     int len = strlen(doc_root);

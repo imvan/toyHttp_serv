@@ -40,7 +40,8 @@ public:
     
     enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST,
                     NO_RESOURCE, FORBIDDEN_REQUEST, FILE_REQUEST,
-                    INTERNAL_ERROR, CLOSED_CONNECTION};
+                    INTERNAL_ERROR, CLOSED_CONNECTION
+                    ,DATABASE_REQUEST};
 
     enum LINE_STATUS {LINE_OK = 0, LINE_BAD, LINE_OPEN};
 
@@ -145,6 +146,15 @@ private:
     
     struct iovec m_iv[2];
     int m_iv_count;
+
+
+    //redis requst and response
+    char * m_redis_requst;
+    char * m_redis_response;
+    
+    //mysql requst and response
+    char* m_mysql_requst;
+    char* m_mysql_response;
 };
 
 
