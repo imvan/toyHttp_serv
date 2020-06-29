@@ -78,6 +78,10 @@ void http_conn::init()
     m_checked_idx = 0;
     m_read_idx = 0;
     m_write_idx = 0;
+    m_redis_request = 0;
+    m_redis_response = 0;
+    m_mysql_request = 0;
+    m_mysql_response = 0;
     memset(m_read_buf,'\0',READ_BUFFER_SIZE);
     memset(m_write_buf,'\0',WRITE_BUFFER_SIZE);
     memset(m_real_file,'\0',FILENAME_LEN);
@@ -283,36 +287,10 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text)
         m_host = text;
     }
 
-
-    //process database
-    else if(strncasecmp(text, "REDIS:",6) == 0)
-    {
-        text += 6;
-        text += strspn(text,"\t");
-        m_redis_requst = text;
-        //do something about redis here
-    }
-
-    else if(strncasecmp(text, "MYSQL:",6 == 0))
-    {
-        text += 6;
-        text += strspn(text,"\t");
-        m_mysql_requst = text;
-        //do something about mysql here
-    }
-
-
-
     else
     {
         printf("unknown header %s\n",text);
     }
-
-    
-
-
-
-
 
 
     return NO_REQUEST;
@@ -406,29 +384,19 @@ http_conn::HTTP_CODE http_conn::process_read()
 
 http_conn::HTTP_CODE http_conn::do_request()
 {
-    //process database here:
-    // all url start with /api  means database requst
-    if(strcasecmp(m_url,"/api?") == 0)
+
+    //parse api request here;
+    // all url start with /api  
+    if(strncasecmp(m_url,"/api",4) == 0)
     {
-      printf("its an database request\n");
+        
+        printf("its an database request\n");
 
-      m_url += strspn(m_url,"/api?");
+        m_url += strspn(m_url,"/api");
 
-     //TODO:
-     //we need a func to parse api
-     //return HTTP_CODE::DATABASE_REQUEST
-     //we need two data struct to save the income requset and outcome result;
+        return parse_api();
 
     }
-
-
-
-
-
-
-
-
-
 
 
 
@@ -469,6 +437,46 @@ http_conn::HTTP_CODE http_conn::do_request()
     close(fd);
     return FILE_REQUEST;
 }
+
+http_conn::HTTP_CODE http_conn::parse_api()
+{
+
+    printf("in parse_api\n");
+
+    if(strncasecmp(m_url,"redis",5) == 0)
+    {
+        printf("a redis request\n");
+        m_redis_request = strpbrk(m_url,"?");
+        do_redis_query();
+        return do_redis_query();
+;
+    }
+    else if (strncasecmp(m_url,"mysql",5) == 0)
+    {
+        printf("a mysql request\n");
+        m_mysql_request = strpbrk(m_url,"?");
+        return do_mysql_query();
+;
+    }
+    else
+    {
+        printf("we dont support other api now\n");
+        return BAD_REQUEST;
+    }
+    
+    
+}
+
+http_conn::HTTP_CODE http_conn::do_redis_query()
+{
+    
+}
+http_conn::HTTP_CODE http_conn::do_mysql_query()
+{
+
+}
+
+
 
 //unmap the shared memory
 void http_conn::unmap()
@@ -681,6 +689,16 @@ bool http_conn::process_write(HTTP_CODE ret)
             }
             break;
             
+        }
+
+        case DATABASE_REQUEST:
+        {
+            add_status_line( 200 , ok_200_title);
+
+
+
+
+            break;
         }
 
         case NO_RESOURCE:

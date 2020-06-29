@@ -42,6 +42,8 @@ public:
                     NO_RESOURCE, FORBIDDEN_REQUEST, FILE_REQUEST,
                     INTERNAL_ERROR, CLOSED_CONNECTION
                     ,DATABASE_REQUEST};
+    
+    enum DATABASE_CODE { REDIS, MYSQL};
 
     enum LINE_STATUS {LINE_OK = 0, LINE_BAD, LINE_OPEN};
 
@@ -73,6 +75,9 @@ private:
     char* get_line() {return m_read_buf + m_start_line;}
     LINE_STATUS parse_line();
 
+    HTTP_CODE parse_api();
+    HTTP_CODE do_redis_query();
+    HTTP_CODE do_mysql_query();
 
     //set of funcs for fill response
     void unmap();
@@ -149,11 +154,11 @@ private:
 
 
     //redis requst and response
-    char * m_redis_requst;
+    char * m_redis_request;
     char * m_redis_response;
     
     //mysql requst and response
-    char* m_mysql_requst;
+    char* m_mysql_request;
     char* m_mysql_response;
 };
 
