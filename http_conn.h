@@ -20,6 +20,8 @@
 #include <errno.h>
 #include <sys/uio.h>
 #include "locker.h"
+#include <hiredis/hiredis.h>
+
 
 
 class http_conn
@@ -30,6 +32,8 @@ public:
     static const int READ_BUFFER_SIZE = 2048;
 
     static const int WRITE_BUFFER_SIZE = 1024;
+
+    static const int DATABASE_BUFFER_SIZE = 1024;
 
     enum METHOD { GET = 0, POST, HEAD, PUT, DELETE, TRACE, OPTIONS,
                 CONNECT, PATHC};
@@ -78,6 +82,7 @@ private:
     HTTP_CODE parse_api();
     HTTP_CODE do_redis_query();
     HTTP_CODE do_mysql_query();
+    void add_database_response(char * key);
 
     //set of funcs for fill response
     void unmap();
@@ -92,6 +97,7 @@ private:
 public:
     static int m_epollfd;
     static int m_user_count;
+    static redisContext* m_redis_connect;
 
 private:
     int m_sockfd;
@@ -155,11 +161,16 @@ private:
 
     //redis requst and response
     char * m_redis_request;
-    char * m_redis_response;
-    
+
+
+
     //mysql requst and response
     char* m_mysql_request;
-    char* m_mysql_response;
+
+    //database response
+    char  m_database_response[DATABASE_BUFFER_SIZE];
+
+
 };
 
 

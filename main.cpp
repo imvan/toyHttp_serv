@@ -13,7 +13,7 @@
 #include "locker.h"
 #include "threadpool.h"
 #include "http_conn.h"
-#include <redis.h>
+
 
 #define MAX_FD 65536
 #define MAX_EVENT_NUMBER 10000
@@ -100,6 +100,13 @@ int main(int argc, char* argv[])
 
     addfd( epollfd, listenfd, false);
     http_conn::m_epollfd = epollfd;
+    http_conn::m_redis_connect = redisConnect("127.0.0.1",6379);
+    if(http_conn::m_redis_connect == NULL || http_conn::m_redis_connect->err)
+    {
+        printf("REDIS ERROR\n");
+        return 1;
+    }
+    
 
     while(true)
     {

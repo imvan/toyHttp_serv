@@ -39,6 +39,8 @@ void modfd(int epollfd, int fd, int ev_op)
 
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
+redisContext* http_conn::m_redis_connect = 0;
+
 
 void http_conn::close_conn(bool real_close)
 {
@@ -79,12 +81,12 @@ void http_conn::init()
     m_read_idx = 0;
     m_write_idx = 0;
     m_redis_request = 0;
-    m_redis_response = 0;
     m_mysql_request = 0;
-    m_mysql_response = 0;
     memset(m_read_buf,'\0',READ_BUFFER_SIZE);
     memset(m_write_buf,'\0',WRITE_BUFFER_SIZE);
     memset(m_real_file,'\0',FILENAME_LEN);
+    memset(m_database_response,'\0',DATABASE_BUFFER_SIZE);
+    
 }
 
 
@@ -447,7 +449,6 @@ http_conn::HTTP_CODE http_conn::parse_api()
     {
         printf("a redis request\n");
         m_redis_request = strpbrk(m_url,"?");
-        do_redis_query();
         return do_redis_query();
 ;
     }
@@ -470,7 +471,93 @@ http_conn::HTTP_CODE http_conn::parse_api()
 http_conn::HTTP_CODE http_conn::do_redis_query()
 {
     
+    if(m_method == GET)
+    {
+        //if not "?" or nothing follow "?"
+        if(!m_redis_request || (strlen(m_redis_request) == 1) )
+        {
+            printf("BAD DATABASE GET REQUEST, nothing in url\n");
+            return BAD_REQUEST;
+        }
+
+        m_redis_request++;
+
+        //parse the request
+        char * query = 0;
+        char * type = 0;
+
+        query = m_redis_request;
+        printf("m_redis_request is %s\n",m_redis_request);
+        if(strncasecmp(query,"query",5) == 0)
+        {
+            query = strpbrk(query,"=");
+            if(!query)
+            {
+                printf("query without = \n");
+                return BAD_REQUEST;
+            }
+            query++;
+        }
+        else
+        {
+            printf("no query\n");
+            return BAD_REQUEST;
+        }
+        
+        //parse the type
+        m_redis_request = strpbrk(m_redis_request,"&");
+        if(!m_redis_request)
+        {
+            printf("just query, not type\n");
+            return BAD_REQUEST;
+        }
+        *m_redis_request++ = '\0';
+
+
+        type = m_redis_request;
+        if(strncasecmp(type,"type",4) == 0)
+        {
+            type = strpbrk(type,"=");
+            if(!type)
+            {
+                printf("type without = \n");
+                return BAD_REQUEST;
+            }
+            type++;
+        }
+        add_database_response(query);
+        return DATABASE_REQUEST;
+    }
+
+    else if(m_method == POST)
+    {
+        return DATABASE_REQUEST;
+    }
+    else
+    {
+        printf("not support other method to query database\n");
+        return BAD_REQUEST;
+    }
+    
 }
+void http_conn::add_database_response(char * key)
+{
+    strcat(m_database_response,"key=");
+    strcat(m_database_response,key);
+    strcat(m_database_response,"&");
+    strcat(m_database_response,"value=");
+    redisReply* _reply = (redisReply*)redisCommand(m_redis_connect,"GET %s",key);
+    if(_reply->type == REDIS_REPLY_NIL)
+    {
+        strcat(m_database_response,"NIL");
+    }
+    else
+    {
+        strcat(m_database_response,_reply->str);
+    }
+    
+}
+
 http_conn::HTTP_CODE http_conn::do_mysql_query()
 {
 
@@ -694,11 +781,13 @@ bool http_conn::process_write(HTTP_CODE ret)
         case DATABASE_REQUEST:
         {
             add_status_line( 200 , ok_200_title);
-
-
-
-
-            break;
+            add_headers(strlen(m_database_response));
+            m_iv[0].iov_base = m_write_buf;
+            m_iv[0].iov_len = m_write_idx;
+            m_iv[1].iov_base = m_database_response;
+            m_iv[1].iov_len = strlen(m_database_response);
+            m_iv_count = 2;
+            return true;
         }
 
         case NO_RESOURCE:
