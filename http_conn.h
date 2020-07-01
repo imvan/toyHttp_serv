@@ -98,6 +98,7 @@ public:
     static int m_epollfd;
     static int m_user_count;
     static redisContext* m_redis_connect;
+    static locker m_db_lock;
 
 private:
     int m_sockfd;

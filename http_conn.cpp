@@ -40,6 +40,7 @@ void modfd(int epollfd, int fd, int ev_op)
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
 redisContext* http_conn::m_redis_connect = 0;
+locker http_conn::m_db_lock;
 
 
 void http_conn::close_conn(bool real_close)
@@ -504,6 +505,7 @@ http_conn::HTTP_CODE http_conn::do_redis_query()
             return BAD_REQUEST;
         }
         
+        /*
         //parse the type
         m_redis_request = strpbrk(m_redis_request,"&");
         if(!m_redis_request)
@@ -512,7 +514,7 @@ http_conn::HTTP_CODE http_conn::do_redis_query()
             return BAD_REQUEST;
         }
         *m_redis_request++ = '\0';
-
+        
 
         type = m_redis_request;
         if(strncasecmp(type,"type",4) == 0)
@@ -525,6 +527,7 @@ http_conn::HTTP_CODE http_conn::do_redis_query()
             }
             type++;
         }
+        */
         add_database_response(query);
         return DATABASE_REQUEST;
     }
@@ -546,13 +549,19 @@ void http_conn::add_database_response(char * key)
     strcat(m_database_response,key);
     strcat(m_database_response,"&");
     strcat(m_database_response,"value=");
+    printf("do request\n");
+    m_db_lock.lock();
     redisReply* _reply = (redisReply*)redisCommand(m_redis_connect,"GET %s",key);
+    m_db_lock.unlock();
+    printf("get request\n");
     if(_reply->type == REDIS_REPLY_NIL)
     {
+        printf("none request\n");
         strcat(m_database_response,"NIL");
     }
     else
     {
+        printf("good,request\n");
         strcat(m_database_response,_reply->str);
     }
     
