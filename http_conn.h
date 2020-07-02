@@ -21,6 +21,7 @@
 #include <sys/uio.h>
 #include "locker.h"
 #include <hiredis/hiredis.h>
+#include <mysql/mysql.h>
 
 
 
@@ -47,8 +48,7 @@ public:
                     INTERNAL_ERROR, CLOSED_CONNECTION
                     ,DATABASE_REQUEST};
     
-    enum DATABASE_CODE { REDIS, MYSQL};
-
+    
     enum LINE_STATUS {LINE_OK = 0, LINE_BAD, LINE_OPEN};
 
 public:
@@ -80,9 +80,10 @@ private:
     LINE_STATUS parse_line();
 
     HTTP_CODE parse_api();
-    HTTP_CODE do_redis_query();
-    HTTP_CODE do_mysql_query();
-    void add_database_response(char * key);
+    HTTP_CODE do_redis_query(char * api);
+    HTTP_CODE do_mysql_query(char * api);
+    void add_redis_response(char * key, char * api);
+    void add_mysql_response(char * key, char * api);
 
     //set of funcs for fill response
     void unmap();
@@ -98,7 +99,9 @@ public:
     static int m_epollfd;
     static int m_user_count;
     static redisContext* m_redis_connect;
-    static locker m_db_lock;
+    static MYSQL* m_mysql_connect;    
+    static locker m_redis_lock;
+    static locker m_mysql_lock;
 
 private:
     int m_sockfd;
@@ -162,7 +165,6 @@ private:
 
     //redis requst and response
     char * m_redis_request;
-
 
 
     //mysql requst and response

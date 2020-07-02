@@ -101,9 +101,17 @@ int main(int argc, char* argv[])
     addfd( epollfd, listenfd, false);
     http_conn::m_epollfd = epollfd;
     http_conn::m_redis_connect = redisConnect("127.0.0.1",6379);
+    http_conn::m_mysql_connect = mysql_init(NULL);
+    http_conn::m_mysql_connect = mysql_real_connect(http_conn::m_mysql_connect,"localhost","van","van653","account",0,NULL,0);
+
     if(http_conn::m_redis_connect == NULL || http_conn::m_redis_connect->err)
     {
         printf("REDIS ERROR\n");
+        return 1;
+    }
+    if(http_conn::m_mysql_connect == NULL)
+    {
+        printf("MYSQL ERROR\n");
         return 1;
     }
     
@@ -181,6 +189,8 @@ int main(int argc, char* argv[])
 
     close(epollfd);
     close(listenfd);
+    redisFree(http_conn::m_redis_connect);
+    mysql_close(http_conn::m_mysql_connect);
     delete [] users;
     delete pool;
     return 0;

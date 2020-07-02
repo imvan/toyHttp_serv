@@ -40,7 +40,9 @@ void modfd(int epollfd, int fd, int ev_op)
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
 redisContext* http_conn::m_redis_connect = 0;
-locker http_conn::m_db_lock;
+MYSQL* http_conn::m_mysql_connect = 0;
+locker http_conn::m_redis_lock;
+locker http_conn::m_mysql_lock;
 
 
 void http_conn::close_conn(bool real_close)
@@ -255,6 +257,7 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text)
         //if threre is request body
         if(m_content_length != 0)
         {
+            printf("content is not empty\n");
             m_check_state = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
@@ -304,11 +307,27 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text)
 //HTTP request body, we don't parse it
 http_conn::HTTP_CODE http_conn::parse_content(char* text)
 {
+
+    //assume that just one line content.
+    if(m_content_length == 0 && m_method == GET)
+    {
+        return GET_REQUEST;
+    }
+    else if(m_method == POST)
+    {
+        m_redis_request = text;
+        m_mysql_request = text;
+        text[m_content_length] = '\0';
+        return DATABASE_REQUEST;
+    }
+
+    /*
     if (m_read_idx >= (m_content_length + m_checked_idx))
     {
         text[m_content_length] = '\0';
         return GET_REQUEST;
     }
+    */
     return NO_REQUEST;
 }
 
@@ -362,7 +381,7 @@ http_conn::HTTP_CODE http_conn::process_read()
             {
                 printf("in CHECK_STATE_CONTENT\n");
                 ret = parse_content(text);
-                if( ret == GET_REQUEST)
+                if( ret == GET_REQUEST || ret == DATABASE_REQUEST)
                 {
                     return do_request();
                 }
@@ -446,19 +465,30 @@ http_conn::HTTP_CODE http_conn::parse_api()
 
     printf("in parse_api\n");
 
-    if(strncasecmp(m_url,"redis",5) == 0)
+    if(strncasecmp(m_url,"redis",5) == 0 && m_method == GET)
     {
         printf("a redis request\n");
         m_redis_request = strpbrk(m_url,"?");
-        return do_redis_query();
+        return do_redis_query("get");
 ;
     }
     else if (strncasecmp(m_url,"mysql",5) == 0)
     {
         printf("a mysql request\n");
         m_mysql_request = strpbrk(m_url,"?");
-        return do_mysql_query();
+        return do_mysql_query("select");
 ;
+    }
+    else if (strncasecmp(m_url,"signin",6) == 0)
+    {
+
+        printf("a sign in request\n");
+        return do_mysql_query("signin");
+    }
+    else if (strncasecmp(m_url,"signup",6) == 0)
+    {
+        printf("a sign up request\n");
+        return do_mysql_query("signup");
     }
     else
     {
@@ -469,10 +499,10 @@ http_conn::HTTP_CODE http_conn::parse_api()
     
 }
 
-http_conn::HTTP_CODE http_conn::do_redis_query()
+http_conn::HTTP_CODE http_conn::do_redis_query(char * api)
 {
     
-    if(m_method == GET)
+    if(strcasecmp(api,"get") == 0 && m_method == GET)
     {
         //if not "?" or nothing follow "?"
         if(!m_redis_request || (strlen(m_redis_request) == 1) )
@@ -528,12 +558,13 @@ http_conn::HTTP_CODE http_conn::do_redis_query()
             type++;
         }
         */
-        add_database_response(query);
+        add_redis_response(query,api);
         return DATABASE_REQUEST;
     }
 
-    else if(m_method == POST)
+    else if(strcmp(api,"set") == 0 && m_method == POST )
     {
+        add_redis_response(m_redis_request,api);
         return DATABASE_REQUEST;
     }
     else
@@ -543,33 +574,92 @@ http_conn::HTTP_CODE http_conn::do_redis_query()
     }
     
 }
-void http_conn::add_database_response(char * key)
+void http_conn::add_redis_response(char * msg,char * api)
 {
-    strcat(m_database_response,"key=");
-    strcat(m_database_response,key);
-    strcat(m_database_response,"&");
-    strcat(m_database_response,"value=");
-    printf("do request\n");
-    m_db_lock.lock();
-    redisReply* _reply = (redisReply*)redisCommand(m_redis_connect,"GET %s",key);
-    m_db_lock.unlock();
-    printf("get request\n");
-    if(_reply->type == REDIS_REPLY_NIL)
+    if(strcmp(api,"get") && m_method == GET)
     {
-        printf("none request\n");
-        strcat(m_database_response,"NIL");
+        strcat(m_database_response,"key=");
+        strcat(m_database_response,msg);
+        strcat(m_database_response,"&");
+        strcat(m_database_response,"value=");
+
+        m_redis_lock.lock();
+        redisReply* _reply = (redisReply*)redisCommand(m_redis_connect,"GET %s",msg);
+        m_redis_lock.unlock();
+
+        if(_reply->type == REDIS_REPLY_NIL)
+        {
+            printf("none request\n");
+            strcat(m_database_response,"NIL");
+        }
+        else
+        {
+            printf("good,request\n");
+            strcat(m_database_response,_reply->str);
+        }
+        freeReplyObject(_reply);
+    }
+
+    else if(strcmp(api,"set") == 0 &&  m_method == POST)
+    {
+        m_redis_lock.lock();
+        redisReply* _reply = (redisReply*) redisCommand(m_redis_connect,msg);
+        m_redis_lock.unlock();
+
+        if(_reply->type == REDIS_REPLY_ERROR )
+        {
+            printf("redis POST fail, %s\n",_reply->str); 
+        }
+        strcat(m_database_response,_reply->str);
+        freeReplyObject(_reply);
+    }
+
+    
+}
+
+http_conn::HTTP_CODE http_conn::do_mysql_query(char * api)
+{
+    
+    if(m_method == GET && strcmp(api,"select") == 0)
+    {
+        return BAD_REQUEST;
+    }
+
+    else if(m_method == POST && (strcmp(api,"signin") ==0 || strcmp(api,"signup" ) == 0 ))
+    {
+        add_mysql_response(m_mysql_request,api);
+        return DATABASE_REQUEST;
     }
     else
     {
-        printf("good,request\n");
-        strcat(m_database_response,_reply->str);
+        return BAD_REQUEST;
     }
     
 }
 
-http_conn::HTTP_CODE http_conn::do_mysql_query()
+void http_conn::add_mysql_response(char* key,char * api)
 {
+    if(m_method == GET)
+    {
 
+    }
+    else if(m_method == POST)
+    {
+        m_mysql_lock.lock();
+        int res = mysql_query(m_mysql_connect,key);
+        if(!res){
+            printf("mysql_query failed: %s\n", mysql_error(m_mysql_connect));
+            strcat(m_database_response,"MYSQL QUERY FAILED");
+        }
+        else
+        {
+            printf("mysql_query successed\n");
+            strcat(m_database_response,"MYSQL QUERY SUCCESSED");
+        }
+        
+        m_mysql_lock.unlock();
+
+    }
 }
 
 
