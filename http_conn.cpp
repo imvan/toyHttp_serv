@@ -71,6 +71,7 @@ void http_conn::init( int sockfd, const sockaddr_in & addr)
 
 void http_conn::init()
 {
+
     m_check_state = CHECK_STATE_REQUESTLINE;
     m_linger = false;
     m_bigfile = false;
@@ -90,8 +91,8 @@ void http_conn::init()
     memset(m_write_buf,'\0',WRITE_BUFFER_SIZE);
     memset(m_real_file,'\0',FILENAME_LEN);
     memset(m_database_response,'\0',DATABASE_BUFFER_SIZE);
-
     
+
 }
 
 
@@ -181,8 +182,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
     }
     *m_url++ = '\0';
 
-
-
     //parse the requst method
     char* method = text;
     if(strcasecmp(method,"GET") == 0)
@@ -210,9 +209,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
         printf("unknowing requst method\n");
         return BAD_REQUEST;
     }
-
-
-
 
 
     m_url += strspn( m_url, " \t");
@@ -262,7 +258,6 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text)
             m_check_state = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
-
         //otherwise, we got a complete HTTP request
         return GET_REQUEST;
     }
@@ -521,27 +516,36 @@ http_conn::HTTP_CODE http_conn::api_login()
         printf("login must be POST method!\n");
         return BAD_REQUEST;
     }
-    char * ptr;
+
+    char Account_buf[30];
+    memset(Account_buf,'\0',30);    
+    char Password_buf[30];
+    memset(Password_buf,'\0',30);
+    char * ptr = 0;
     if(strncasecmp(m_content,"Account:", 8) == 0)
     {
-        ptr = strpbrk(m_content," \t");
-        m_account.Account = ++ptr;
-  
-        ptr = strpbrk(m_content,"\n");
-        m_content = ptr+1;
-
+        
+        strncpy(Account_buf, m_content,30);
+        // partition 
+        ptr = strpbrk(Account_buf,"\r");
         *ptr = '\0';
+        ptr = strpbrk(Account_buf," \t");
+        m_account.Account = ptr+1;
+        
+        m_content = strpbrk(m_content, "\n");
+        *m_content++ ='\0';     
     }
     if(strncasecmp(m_content,"Password:",9) == 0)
     {
-        ptr = strpbrk(m_content, " \t");
-        m_account.Password = ++ptr;
-
-        ptr = strpbrk(m_content,"\n");
-        m_content = ptr+1;
-
+        strncpy(Password_buf, m_content,30);
+        // partition 
+        ptr = strpbrk(Password_buf,"\r");
         *ptr = '\0';
-        printf("password is %s\n",m_account.Password);
+        ptr = strpbrk(Password_buf," \t");
+        m_account.Password = ptr+1;
+        
+        m_content = strpbrk(m_content, "\n");
+        *m_content++ ='\0'; 
     }
     
     if(!m_account.Account || !m_account.Password)
@@ -552,21 +556,39 @@ http_conn::HTTP_CODE http_conn::api_login()
     
     char query[100];
     memset(query,'\0',100);
-    strcat(query,"SELECT password From user_account WHERE account = ");
-    strcat(query,m_account.Account);
+    sprintf(query,"SELECT password FROM user_account WHERE account = %s",m_account.Account);
+    printf("query is %s\n",query);
     m_mysql_lock.lock();
     int res = mysql_query(m_mysql_connect,query);
     
-    if(!res)
+    if(res)
     {
-        
+        printf("mysql_query: %s\n", mysql_error(m_mysql_connect));
+        m_mysql_lock.unlock();
+        return BAD_REQUEST;
     }
+    MYSQL_RES *result = mysql_store_result(m_mysql_connect);
+    MYSQL_ROW row = mysql_fetch_row(result);
+    mysql_free_result(result);
     m_mysql_lock.unlock();
-
-
-    return SUCCESS_LOGIN_REQUEST;
-
+    if(!row)
+    {
+        printf("have not this user account\n");
+        return BAD_LOGIN_REQUEST;
+    }
+    printf("password is %s, len is %d\n",m_account.Password,strlen(m_account.Password));
+    printf("row[0] is %s, len is %d\n",row[0], strlen(row[0]));
     
+    if(strcmp(m_account.Password,row[0]) == 0)
+    {
+        printf("right password\n");
+        
+        return SUCCESS_LOGIN_REQUEST;
+    }
+    
+    printf("wrong password\n");
+    return BAD_LOGIN_REQUEST;
+
 
 
 }
@@ -978,6 +1000,30 @@ bool http_conn::process_write(HTTP_CODE ret)
                 return false; 
             }
             break;           
+        }
+
+        case BAD_LOGIN_REQUEST:
+        {
+            add_status_line(401,error_401_title);
+            add_headers(strlen(error_401_form));
+            if( ! add_content(error_401_form))
+            {
+                printf("in Unauthorized add content failed\n");
+                return false;
+            }
+            break;
+        }
+
+        case SUCCESS_LOGIN_REQUEST:
+        {
+            add_status_line(200,ok_200_title);
+            add_headers(strlen(success_login_form));
+            if( !add_content(success_login_form))
+            {
+                printf("in SUCCESS_LOGIN_REQUEST add content failed\n ");
+                return false;
+            }
+            break;
         }
 
         default:

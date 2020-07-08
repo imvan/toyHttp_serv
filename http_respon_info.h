@@ -18,5 +18,10 @@ const char* error_500_form = "There was an unusual problem serving the requested
 
 const char* doc_root = "/var/www/html";
 
+const char* error_401_title = "Unauthorized";
+const char* error_401_form = "Wrong username or password.\n";
+
+const char* success_login_form = "Successful login.\n";
+
 
 #endif

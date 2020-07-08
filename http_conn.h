@@ -25,8 +25,8 @@
 
 struct account_t
 {
-    char * Account;
-    char * Password;
+    char*  Account;
+    char*  Password;
 };
 
 
@@ -54,6 +54,7 @@ public:
                     NO_RESOURCE, FORBIDDEN_REQUEST, FILE_REQUEST,
                     INTERNAL_ERROR, CLOSED_CONNECTION, 
                     SUCCESS_LOGIN_REQUEST,BAD_LOGIN_REQUEST
+                    
                     };
     
     
@@ -199,8 +200,6 @@ private:
     //api data structure
 
     account_t m_account;
-
-
 
 };
 
