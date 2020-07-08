@@ -73,7 +73,7 @@ void http_conn::init()
 {
     m_check_state = CHECK_STATE_REQUESTLINE;
     m_linger = false;
-
+    m_bigfile = false;
     m_method = GET;
     m_url = 0;
     m_version = 0;
@@ -85,10 +85,12 @@ void http_conn::init()
     m_write_idx = 0;
     m_redis_request = 0;
     m_mysql_request = 0;
+    m_content = 0;
     memset(m_read_buf,'\0',READ_BUFFER_SIZE);
     memset(m_write_buf,'\0',WRITE_BUFFER_SIZE);
     memset(m_real_file,'\0',FILENAME_LEN);
     memset(m_database_response,'\0',DATABASE_BUFFER_SIZE);
+
     
 }
 
@@ -232,7 +234,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 
     if( strncasecmp( m_url, "http://", 7) == 0)
     {
-        printf("NO http:// found in url\n");
         m_url += 7;
         m_url = strchr(m_url, '/');
     }
@@ -293,6 +294,16 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text)
         m_host = text;
     }
 
+    else if(strncasecmp(text, "BigFileUpload:", 14) == 0)
+    {
+        text += 14;
+        text += strspn(text,"\t");
+        if(strcasecmp(text, "Yes") == 0)
+        {
+            m_bigfile = true;
+        }
+
+    }
     else
     {
         printf("unknown header %s\n",text);
@@ -308,18 +319,25 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text)
 http_conn::HTTP_CODE http_conn::parse_content(char* text)
 {
 
-    //assume that just one line content.
+    //we dont parse content here
+    // just get content message
+    // and parse it in each api
     if(m_content_length == 0 && m_method == GET)
     {
         return GET_REQUEST;
     }
-    else if(m_method == POST)
+    else if(m_content_length == 0)
     {
-        m_redis_request = text;
-        m_mysql_request = text;
-        text[m_content_length] = '\0';
-        return DATABASE_REQUEST;
+        printf("not GET request and no content\n");
+        return BAD_REQUEST;
     }
+    else 
+    {
+        m_content = text;
+        //need to be check here;
+        text[m_content_length] = '\0';
+    }
+    
 
     /*
     if (m_read_idx >= (m_content_length + m_checked_idx))
@@ -372,20 +390,28 @@ http_conn::HTTP_CODE http_conn::process_read()
                 }
                 else if(ret == GET_REQUEST)
                 {
-                    printf("its a correct request\n");
+                    printf("its a correct get request\n");
+                    
                     return do_request();
                 }
                 break;
             }
             case CHECK_STATE_CONTENT:
             {
+                //
                 printf("in CHECK_STATE_CONTENT\n");
-                ret = parse_content(text);
-                if( ret == GET_REQUEST || ret == DATABASE_REQUEST)
+                if( m_bigfile)
                 {
-                    return do_request();
+                    //dosomething for bigfile
+                    line_status = LINE_OPEN;
+                    return NO_REQUEST;
                 }
-                line_status = LINE_OPEN;
+                ret = parse_content(text);
+                if( ret == BAD_REQUEST )
+                {
+                    return BAD_REQUEST;
+                }
+                return do_request();     
                 break;
             }
             default:
@@ -407,9 +433,8 @@ http_conn::HTTP_CODE http_conn::process_read()
 http_conn::HTTP_CODE http_conn::do_request()
 {
 
-    //parse api request here;
-    // all url start with /api  
-    if(strncasecmp(m_url,"/api",4) == 0)
+    
+    /*if(strncasecmp(m_url,"/api",4) == 0)
     {
         
         printf("its an database request\n");
@@ -418,7 +443,35 @@ http_conn::HTTP_CODE http_conn::do_request()
 
         return parse_api();
 
+    }*/
+
+    //parse api request here;
+    if(strncasecmp(m_url,"/login",6) == 0)
+    {
+        return api_login();
     }
+    else if (strncasecmp(m_url,"/artical",8) == 0)
+    {
+        return api_artical();
+    }
+    else if (strncasecmp(m_url,"/signup",8) == 0)
+    {
+        return api_signup();
+    }
+    else if (strncasecmp(m_url,"/unlike",7) == 0)
+    {
+        return api_unlike();
+    }
+    else if(strncasecmp(m_url,"/like",5) == 0)
+    {
+        return api_like();
+    }
+    else
+    {
+        printf("we dont support other api now\n");
+        return BAD_REQUEST;
+    }
+
 
 
 
@@ -460,44 +513,70 @@ http_conn::HTTP_CODE http_conn::do_request()
     return FILE_REQUEST;
 }
 
-http_conn::HTTP_CODE http_conn::parse_api()
+
+http_conn::HTTP_CODE http_conn::api_login()
 {
-
-    printf("in parse_api\n");
-
-    if(strncasecmp(m_url,"redis",5) == 0 && m_method == GET)
+    if(m_method != POST)
     {
-        printf("a redis request\n");
-        m_redis_request = strpbrk(m_url,"?");
-        return do_redis_query("get");
-;
-    }
-    else if (strncasecmp(m_url,"mysql",5) == 0)
-    {
-        printf("a mysql request\n");
-        m_mysql_request = strpbrk(m_url,"?");
-        return do_mysql_query("select");
-;
-    }
-    else if (strncasecmp(m_url,"signin",6) == 0)
-    {
-
-        printf("a sign in request\n");
-        return do_mysql_query("signin");
-    }
-    else if (strncasecmp(m_url,"signup",6) == 0)
-    {
-        printf("a sign up request\n");
-        return do_mysql_query("signup");
-    }
-    else
-    {
-        printf("we dont support other api now\n");
+        printf("login must be POST method!\n");
         return BAD_REQUEST;
     }
+    char * ptr;
+    if(strncasecmp(m_content,"Account:", 8) == 0)
+    {
+        ptr = strpbrk(m_content," \t");
+        m_account.Account = ++ptr;
+  
+        ptr = strpbrk(m_content,"\n");
+        m_content = ptr+1;
+
+        *ptr = '\0';
+    }
+    if(strncasecmp(m_content,"Password:",9) == 0)
+    {
+        ptr = strpbrk(m_content, " \t");
+        m_account.Password = ++ptr;
+
+        ptr = strpbrk(m_content,"\n");
+        m_content = ptr+1;
+
+        *ptr = '\0';
+        printf("password is %s\n",m_account.Password);
+    }
     
+    if(!m_account.Account || !m_account.Password)
+    {
+        return BAD_REQUEST;
+    }
+
     
+    char query[100];
+    memset(query,'\0',100);
+    strcat(query,"SELECT password From user_account WHERE account = ");
+    strcat(query,m_account.Account);
+    m_mysql_lock.lock();
+    int res = mysql_query(m_mysql_connect,query);
+    
+    if(!res)
+    {
+        
+    }
+    m_mysql_lock.unlock();
+
+
+    return SUCCESS_LOGIN_REQUEST;
+
+    
+
+
 }
+http_conn::HTTP_CODE http_conn::api_artical(){}
+http_conn::HTTP_CODE http_conn::api_unlike(){}
+http_conn::HTTP_CODE http_conn::api_like(){}
+http_conn::HTTP_CODE http_conn::api_signup(){}
+
+
+
 
 http_conn::HTTP_CODE http_conn::do_redis_query(char * api)
 {
@@ -559,13 +638,13 @@ http_conn::HTTP_CODE http_conn::do_redis_query(char * api)
         }
         */
         add_redis_response(query,api);
-        return DATABASE_REQUEST;
+        return GET_REQUEST;
     }
 
     else if(strcmp(api,"set") == 0 && m_method == POST )
     {
         add_redis_response(m_redis_request,api);
-        return DATABASE_REQUEST;
+        return GET_REQUEST;
     }
     else
     {
@@ -628,7 +707,7 @@ http_conn::HTTP_CODE http_conn::do_mysql_query(char * api)
     else if(m_method == POST && (strcmp(api,"signin") ==0 || strcmp(api,"signup" ) == 0 ))
     {
         add_mysql_response(m_mysql_request,api);
-        return DATABASE_REQUEST;
+        return GET_REQUEST;
     }
     else
     {
@@ -877,7 +956,7 @@ bool http_conn::process_write(HTTP_CODE ret)
             
         }
 
-        case DATABASE_REQUEST:
+        case GET_REQUEST:
         {
             add_status_line( 200 , ok_200_title);
             add_headers(strlen(m_database_response));

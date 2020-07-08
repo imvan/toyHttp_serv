@@ -23,6 +23,11 @@
 #include <hiredis/hiredis.h>
 #include <mysql/mysql.h>
 
+struct account_t
+{
+    char * Account;
+    char * Password;
+};
 
 
 class http_conn
@@ -36,6 +41,8 @@ public:
 
     static const int DATABASE_BUFFER_SIZE = 1024;
 
+    static const int CONTENT_BUFFER_SIZE = 1024;
+
     enum METHOD { GET = 0, POST, HEAD, PUT, DELETE, TRACE, OPTIONS,
                 CONNECT, PATHC};
     
@@ -45,8 +52,9 @@ public:
     
     enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST,
                     NO_RESOURCE, FORBIDDEN_REQUEST, FILE_REQUEST,
-                    INTERNAL_ERROR, CLOSED_CONNECTION
-                    ,DATABASE_REQUEST};
+                    INTERNAL_ERROR, CLOSED_CONNECTION, 
+                    SUCCESS_LOGIN_REQUEST,BAD_LOGIN_REQUEST
+                    };
     
     
     enum LINE_STATUS {LINE_OK = 0, LINE_BAD, LINE_OPEN};
@@ -79,11 +87,18 @@ private:
     char* get_line() {return m_read_buf + m_start_line;}
     LINE_STATUS parse_line();
 
+    // api
     HTTP_CODE parse_api();
     HTTP_CODE do_redis_query(char * api);
     HTTP_CODE do_mysql_query(char * api);
     void add_redis_response(char * key, char * api);
     void add_mysql_response(char * key, char * api);
+
+    HTTP_CODE api_login();
+    HTTP_CODE api_artical();
+    HTTP_CODE api_signup();
+    HTTP_CODE api_like();
+    HTTP_CODE api_unlike();
 
     //set of funcs for fill response
     void unmap();
@@ -98,6 +113,8 @@ private:
 public:
     static int m_epollfd;
     static int m_user_count;
+
+
     static redisContext* m_redis_connect;
     static MYSQL* m_mysql_connect;    
     static locker m_redis_lock;
@@ -151,6 +168,9 @@ private:
     //HTTP keepalive
     bool m_linger;
 
+    //bigfile upload
+    bool m_bigfile;
+
     //the posioton of target file which has been mmap to memory
     char* m_file_address;
 
@@ -172,6 +192,14 @@ private:
 
     //database response
     char  m_database_response[DATABASE_BUFFER_SIZE];
+
+    //content buffer
+    char* m_content;
+
+    //api data structure
+
+    account_t m_account;
+
 
 
 };

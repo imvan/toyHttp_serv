@@ -18,3 +18,12 @@ need two data struct for mysql and redis
 record the api, table and so on
 
 today I've coded some shit!!!
+
+# 2020.7.8
+
+use restful api standards
+
+TODO: 
+finish all api
+
+every threads init own database connection, but use the globol connection. 
