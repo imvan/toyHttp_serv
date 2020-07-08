@@ -27,3 +27,6 @@ TODO:
 finish all api
 
 every threads init own database connection, but use the globol connection. 
+
+# 2020.7.9
+update "login" api
