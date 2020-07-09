@@ -30,6 +30,11 @@ struct account_t
     char*  Username;
 };
 
+struct zset_t
+{
+    char* set_name;
+    char* user_name;
+};
 
 class http_conn
 {
@@ -56,6 +61,7 @@ public:
                     INTERNAL_ERROR, CLOSED_CONNECTION, 
                     SUCCESS_LOGIN_REQUEST,BAD_LOGIN_REQUEST
                     ,SUCCESS_SIGNUP_REQUEST, BAD_SIGNUP_REQUEST
+                    ,SUCCESS_LIKE_REQUEST, BAD_LIKE_REQUEST
                     };
     
     
@@ -90,17 +96,11 @@ private:
     LINE_STATUS parse_line();
 
     // api
-    HTTP_CODE parse_api();
-    HTTP_CODE do_redis_query(char * api);
-    HTTP_CODE do_mysql_query(char * api);
-    void add_redis_response(char * key, char * api);
-    void add_mysql_response(char * key, char * api);
-
     HTTP_CODE api_login();
     HTTP_CODE api_artical();
     HTTP_CODE api_signup();
-    HTTP_CODE api_like();
-    HTTP_CODE api_unlike();
+    HTTP_CODE api_like(bool increase);
+
 
     //set of funcs for fill response
     void unmap();
@@ -117,11 +117,12 @@ public:
     static int m_user_count;
 
 
+/*
     static redisContext* m_redis_connect;
     static MYSQL* m_mysql_connect;    
     static locker m_redis_lock;
     static locker m_mysql_lock;
-
+*/
 private:
     int m_sockfd;
     sockaddr_in m_address;
@@ -198,9 +199,6 @@ private:
     //content buffer
     char* m_content;
 
-    //api data structure
-
-    account_t m_account;
 
 };
 

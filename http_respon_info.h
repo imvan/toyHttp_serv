@@ -27,6 +27,9 @@ const char* success_login_form = "User login Successfully.\n";
 const char* error_signup_form = "Username already exist.\n";
 const char* success_signup_form = "User signup successfully.\n";
 
+const char* error_like_form = "Like/unlike failed.\n";
+const char* success_like_form = "Like/unlike successfully.\n";
+
 
 
 #endif
