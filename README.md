@@ -30,6 +30,9 @@ every threads init own database connection, but use the globol connection.
 
 # 2020.7.9
 update "login" api
+
 update "signup" api
+
 update "like" and "unlike" api
+
 use local connection for database, database mutex lock is removed.
