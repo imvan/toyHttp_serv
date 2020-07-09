@@ -317,6 +317,7 @@ http_conn::HTTP_CODE http_conn::parse_content(char* text)
     //we dont parse content here
     // just get content message
     // and parse it in each api
+    printf("in paser_content\n");
     if(m_content_length == 0 && m_method == GET)
     {
         return GET_REQUEST;
@@ -439,7 +440,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         return parse_api();
 
     }*/
-
+    printf("in do request\n");
     //parse api request here;
     if(strncasecmp(m_url,"/login",6) == 0)
     {
@@ -592,10 +593,94 @@ http_conn::HTTP_CODE http_conn::api_login()
 
 
 }
+http_conn::HTTP_CODE http_conn::api_signup()
+{   
+    printf("in signup\n");
+    if(m_method != POST)
+    {
+        printf("signup must be requested  by POST\n");
+        return BAD_REQUEST;
+    }
+
+    char Account_buf[30];
+    memset(Account_buf,'\0',30);    
+    char Password_buf[30];
+    memset(Password_buf,'\0',30);
+    char Username_buf[30];
+    memset(Username_buf,'\0',30);
+    char * ptr = 0;
+    if(strncasecmp(m_content,"Account:", 8) == 0)
+    {
+        
+        strncpy(Account_buf, m_content,30);
+        // partition 
+        ptr = strpbrk(Account_buf,"\r");
+        *ptr = '\0';
+        ptr = strpbrk(Account_buf," \t");
+        m_account.Account = ptr+1;
+        
+        m_content = strpbrk(m_content, "\n");
+        *m_content++ ='\0';     
+    }
+    printf("account is %s\n",m_account.Account);
+    if(strncasecmp(m_content,"Password:",9) == 0)
+    {
+        strncpy(Password_buf, m_content,30);
+        // partition 
+        ptr = strpbrk(Password_buf,"\r");
+        *ptr = '\0';
+        ptr = strpbrk(Password_buf," \t");
+        m_account.Password = ptr+1;
+        
+        m_content = strpbrk(m_content, "\n");
+        *m_content++ ='\0'; 
+    }
+    printf("Password is %s\n",m_account.Password);
+    printf("m_content is %s\n",m_content);
+    if(strncasecmp(m_content,"Username:",9) == 0)
+    {
+        strncpy(Username_buf, m_content,30);
+        // partition 
+        ptr = strpbrk(Username_buf,"\r");
+        *ptr = '\0';
+        ptr = strpbrk(Username_buf," \t");
+        m_account.Username = ptr+1;
+        
+        m_content = strpbrk(m_content, "\n");
+        *m_content++ ='\0'; 
+    }
+    printf("Username is %s\n",m_account.Username);
+    if(!m_account.Account || !m_account.Password || !m_account.Username)
+    {
+        return BAD_REQUEST;
+    }
+    printf("parse finished\n");
+    
+    char query[100];
+    memset(query,'\0',100);
+    sprintf(query,"INSERT INTO user_account values( %s , %s , %s, 1, CURDATE())",
+    m_account.Account,m_account.Password,m_account.Username);
+    printf("query is %s\n",query);
+
+    m_mysql_lock.lock();
+
+    int res = mysql_query(m_mysql_connect,query);
+    if(res)
+    {
+        printf("mysql_query: %s\n", mysql_error(m_mysql_connect));
+        m_mysql_lock.unlock();
+        return BAD_SIGNUP_REQUEST;
+    }
+    m_mysql_lock.unlock();
+    printf("SIGNUP successfully\n");
+    return SUCCESS_SIGNUP_REQUEST;
+
+
+}
 http_conn::HTTP_CODE http_conn::api_artical(){}
 http_conn::HTTP_CODE http_conn::api_unlike(){}
 http_conn::HTTP_CODE http_conn::api_like(){}
-http_conn::HTTP_CODE http_conn::api_signup(){}
+
 
 
 
@@ -1005,10 +1090,10 @@ bool http_conn::process_write(HTTP_CODE ret)
         case BAD_LOGIN_REQUEST:
         {
             add_status_line(401,error_401_title);
-            add_headers(strlen(error_401_form));
-            if( ! add_content(error_401_form))
+            add_headers(strlen(error_login_form));
+            if( ! add_content(error_login_form))
             {
-                printf("in Unauthorized add content failed\n");
+                printf("in BAD_LOGIN_REQUEST add content failed\n");
                 return false;
             }
             break;
@@ -1021,6 +1106,30 @@ bool http_conn::process_write(HTTP_CODE ret)
             if( !add_content(success_login_form))
             {
                 printf("in SUCCESS_LOGIN_REQUEST add content failed\n ");
+                return false;
+            }
+            break;
+        }
+
+        case BAD_SIGNUP_REQUEST:
+        {
+            add_status_line(400, error_400_title);
+            add_headers(strlen(error_signup_form));
+            if( !add_content(error_signup_form))
+            {
+                printf("in BAD_SIGNUP_REQUEST add content failed\n ");
+                return false;
+            }
+            break;
+        }
+
+        case SUCCESS_SIGNUP_REQUEST:
+        {
+            add_status_line(201,created_201_title);
+            add_headers(strlen(success_signup_form));
+            if( !add_content(success_signup_form))
+            {
+                printf("in SUCCESS_SIGNUP_REQUEST add content failed\n ");
                 return false;
             }
             break;

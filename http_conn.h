@@ -27,6 +27,7 @@ struct account_t
 {
     char*  Account;
     char*  Password;
+    char*  Username;
 };
 
 
@@ -54,7 +55,7 @@ public:
                     NO_RESOURCE, FORBIDDEN_REQUEST, FILE_REQUEST,
                     INTERNAL_ERROR, CLOSED_CONNECTION, 
                     SUCCESS_LOGIN_REQUEST,BAD_LOGIN_REQUEST
-                    
+                    ,SUCCESS_SIGNUP_REQUEST, BAD_SIGNUP_REQUEST
                     };
     
     

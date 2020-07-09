@@ -3,6 +3,7 @@
 
 
 const char* ok_200_title = "OK";
+const char* created_201_title = "CREATED";
 
 const char* error_400_title = "Bad Request";
 const char* error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
@@ -19,9 +20,13 @@ const char* error_500_form = "There was an unusual problem serving the requested
 const char* doc_root = "/var/www/html";
 
 const char* error_401_title = "Unauthorized";
-const char* error_401_form = "Wrong username or password.\n";
 
-const char* success_login_form = "Successful login.\n";
+const char* error_login_form = "Wrong username or password.\n";
+const char* success_login_form = "User login Successfully.\n";
+
+const char* error_signup_form = "Username already exist.\n";
+const char* success_signup_form = "User signup successfully.\n";
+
 
 
 #endif
