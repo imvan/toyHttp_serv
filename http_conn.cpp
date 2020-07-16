@@ -447,7 +447,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     {
         return api_like(true);
     }
-    else
+    else if(strlen(m_url) != 1)
     {
         printf("we dont support other api now\n");
         return BAD_REQUEST;
@@ -459,12 +459,16 @@ http_conn::HTTP_CODE http_conn::do_request()
     //process file request here:
 
     //the file path inited to the root path
-    strcpy( m_real_file, doc_root);
-    int len = strlen(doc_root);
+    //strcpy( m_real_file, doc_root);
+    //int len = strlen(doc_root);
+
+    
+    strcpy(m_real_file,default_html);
+    int len = strlen(default_html);
     
     //add url to the tail of root path
-    strncpy( m_real_file + len, m_url, FILENAME_LEN - len -1);
-
+    //strncpy( m_real_file + len, m_url, FILENAME_LEN - len -1);
+    printf("file is %s \n",m_real_file);
     //get file attributs and put it to the buf
     if( stat(m_real_file, &m_file_stat) <0 )
     {
@@ -512,7 +516,8 @@ http_conn::HTTP_CODE http_conn::api_login()
     char * ptr = 0;
     m_account.Account = 0;
     m_account.Password = 0;
-    if(strncasecmp(m_content,"Account:", 8) == 0)
+    m_content = strstr(m_content,"Account:");
+    if(m_content && strncasecmp(m_content,"Account:", 8) == 0)
     {
         
         strncpy(Account_buf, m_content,30);
@@ -525,7 +530,9 @@ http_conn::HTTP_CODE http_conn::api_login()
         m_content = strpbrk(m_content, "\n");
         *m_content++ ='\0';     
     }
-    if(strncasecmp(m_content,"Password:",9) == 0)
+
+    m_content = strstr(m_content,"Password:");    
+    if(m_content && strncasecmp(m_content,"Password:",9) == 0)
     {
         strncpy(Password_buf, m_content,30);
         // partition 
@@ -576,7 +583,10 @@ http_conn::HTTP_CODE http_conn::api_login()
     printf("password is %s, len is %d\n",m_account.Password,strlen(m_account.Password));
     printf("row[0] is %s, len is %d\n",row[0], strlen(row[0]));
     
-    if(strcmp(m_account.Password,row[0]) == 0)
+    char reply_password[30];
+    sprintf(reply_password,"'%s'",row[0]);
+    printf("reply password is %s\n",reply_password);
+    if(strcmp(m_account.Password,reply_password) == 0)
     {
         printf("right password\n");
         
@@ -610,11 +620,14 @@ http_conn::HTTP_CODE http_conn::api_signup()
     m_account.Password = 0;
     m_account.Username = 0;
     char * ptr = 0;
-    if(strncasecmp(m_content,"Account:", 8) == 0)
+
+    m_content = strstr(m_content,"Account:");
+    if(m_content && strncasecmp(m_content,"Account:", 8) == 0)
     {
         
         strncpy(Account_buf, m_content,30);
         // partition 
+        printf("Account_buf is %s\n",Account_buf);
         ptr = strpbrk(Account_buf,"\r");
         *ptr = '\0';
         ptr = strpbrk(Account_buf," \t");
@@ -623,11 +636,13 @@ http_conn::HTTP_CODE http_conn::api_signup()
         m_content = strpbrk(m_content, "\n");
         *m_content++ ='\0';     
     }
-    printf("account is %s\n",m_account.Account);
-    if(strncasecmp(m_content,"Password:",9) == 0)
+
+    m_content = strstr(m_content,"Password:");
+    if(m_content && strncasecmp(m_content,"Password:",9) == 0)
     {
         strncpy(Password_buf, m_content,30);
-        // partition 
+        // partition
+        printf("Password_buf is %s\n",Password_buf); 
         ptr = strpbrk(Password_buf,"\r");
         *ptr = '\0';
         ptr = strpbrk(Password_buf," \t");
@@ -636,12 +651,12 @@ http_conn::HTTP_CODE http_conn::api_signup()
         m_content = strpbrk(m_content, "\n");
         *m_content++ ='\0'; 
     }
-    printf("Password is %s\n",m_account.Password);
-    printf("m_content is %s\n",m_content);
-    if(strncasecmp(m_content,"Username:",9) == 0)
+    m_content = strstr(m_content,"Username:");
+    if(m_content && strncasecmp(m_content,"Username:",9) == 0)
     {
         strncpy(Username_buf, m_content,30);
         // partition 
+        printf("Username_buf is %s\n",Password_buf);
         ptr = strpbrk(Username_buf,"\r");
         *ptr = '\0';
         ptr = strpbrk(Username_buf," \t");
@@ -650,13 +665,13 @@ http_conn::HTTP_CODE http_conn::api_signup()
         m_content = strpbrk(m_content, "\n");
         *m_content++ ='\0'; 
     }
-
-    if(!m_account.Account || !m_account.Password || !m_account.Username)
+    if(!m_account.Username){m_account.Username = "'default name'";}
+    if(!m_account.Account || !m_account.Password || !m_account.Username )
     {
         return BAD_REQUEST;
     }
-    printf("Username is %s\n",m_account.Username);
-    printf("parse finished\n");
+    
+
     
     char query[100];
     memset(query,'\0',100);

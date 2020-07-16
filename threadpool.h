@@ -2,6 +2,7 @@
 #define THREADPOOL_H
 
 #include <list>
+#include <deque>
 #include <cstdio>
 #include <exception>
 #include <pthread.h>
@@ -25,7 +26,7 @@ private:
     int m_thread_number;
     int  m_max_requests;
     pthread_t * m_threads;
-    std::list<T*> m_workqueue;
+    std::deque<T*> m_workqueue;
     locker m_queuelocker;
     sem m_queuestat;
     bool  m_stop;

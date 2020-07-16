@@ -17,7 +17,8 @@ const char* error_404_form = "The requested file was not found on this server.\n
 const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
 
-const char* doc_root = "/var/www/html";
+const char* doc_root = "/home/van/httpserv/toyHttp_serv/html";
+const char* default_html = "/home/van/httpserv/toyHttp_serv/html/login.html";
 
 const char* error_401_title = "Unauthorized";
 
