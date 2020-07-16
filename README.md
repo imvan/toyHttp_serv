@@ -1,7 +1,9 @@
 # 2020.7.16
-add a very simple login web page
+add a very simple login web page, just visit 49.234.110.186:12345
 
-test the login  and signup funciton
+just support login and signup right now
+
+
 
 
 # 2020.7.9
