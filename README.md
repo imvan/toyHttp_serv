@@ -42,5 +42,16 @@ add some APIs
 add makefile
 
 
+<<<<<<< HEAD
 # 2020.6.21
 BUG FIXED
+=======
+# 2020.7.9
+update "login" api
+
+update "signup" api
+
+update "like" and "unlike" api
+
+use local connection for database, database mutex lock is removed.
+>>>>>>> e75ee3bf13199c452933fdc95a2e74ce933d39f6
